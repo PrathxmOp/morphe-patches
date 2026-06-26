@@ -308,7 +308,7 @@ Second \"item\" text"</string>
   <string name="morphe_external_downloader_empty_warning">패키지명은 비워둘 수 없습니다</string>
   <!-- video.voiceovertranslation.voiceOverTranslationPatch -->
   <string name="morphe_vot_screen_title">음성 번역</string>
-  <string name="morphe_vot_screen_summary">기기의 텍스트 음성 변환(TTS)을 사용하여 동영상 자막을 재생과 동기화하여 음성으로 읽어줍니다</string>
+  <string name="morphe_vot_screen_summary">기기의 텍스트 음성 변환(TTS)을 사용하여 재생에 맞춰 동기화된 동영상 자막을 읽어줍니다</string>
   <string name="morphe_vot_enabled_title">음성 번역</string>
   <string name="morphe_vot_caption_language_title">언어</string>
   <string name="morphe_vot_translation_service_title">번역 제공자</string>
@@ -318,16 +318,16 @@ Second \"item\" text"</string>
   <string name="morphe_vot_translation_volume_summary">더빙된 번역 음성의 볼륨</string>
   <string name="morphe_vot_max_speech_rate_title">최대 음성 속도</string>
   <string name="morphe_vot_max_speech_rate_summary">자막 구간에 맞추기 위한 최대 음성 속도 배수</string>
-  <string name="morphe_vot_mymemory_info_summary">"무료 번역 API로, API 키가 필요하지 않습니다. 무료 플랜에서는 하루 최대 5,000자까지 사용할 수 있으며, 이메일 주소를 등록하면 하루 최대 50,000자까지 사용할 수 있습니다.
+  <string name="morphe_vot_mymemory_info_summary">"무료 번역 API로, API 키가 필요하지 않습니다. 무료 플랜에서는 하루 최대 5,000자까지 사용할 수 있으며, 이메일 주소를 등록하면 하루 최대 50,000자까지 사용할 수 있습니다
 
-여기를 탭하여 MyMemory.translated.net을 여세요."</string>
+자세한 정보를 보려면 여기를 탭하여 'MyMemory.translated.net'으로 이동하세요"</string>
   <string name="morphe_vot_mymemory_email_title">MyMemory 이메일</string>
-  <string name="morphe_vot_mymemory_email_summary">선택 사항입니다. MyMemory 이메일 주소를 입력하면 일일 사용 한도가 5,000자에서 50,000자로 증가합니다. 이메일 주소를 입력하지 않으면 익명 사용자 한도가 적용됩니다.</string>
-  <string name="morphe_vot_openrouter_info_summary">"OpenRouter를 통한 유료 AI 번역입니다. 한 번만 충전하면 수천 개의 동영상을 번역할 수 있습니다. Mistral Nemo는 가장 저렴한 옵션이며, Gemma 4는 가장 높은 번역 품질을 제공합니다.
+  <string name="morphe_vot_mymemory_email_summary">선택 사항입니다. MyMemory 이메일 주소를 입력하면 일일 사용 한도가 5,000자에서 50,000자로 증가합니다. 이메일 주소를 입력하지 않으면 익명 사용자 한도가 적용됩니다</string>
+  <string name="morphe_vot_openrouter_info_summary">"OpenRouter를 통한 유료 AI 번역입니다. 한 번만 충전하면 수천 개의 동영상을 번역할 수 있습니다. Mistral Nemo는 가장 저렴한 옵션이며, Gemma 4는 가장 높은 번역 품질을 제공합니다
 
-여기를 탭하여 OpenRouter.ai를 여세요."</string>
+자세한 정보를 보려면 여기를 탭하여 'OpenRouter.ai'로 이동하세요"</string>
   <string name="morphe_vot_openrouter_api_key_title">OpenRouter API 키</string>
-  <string name="morphe_vot_openrouter_api_key_summary">OpenRouter API 키입니다. API 키는 \'OpenRouter.ai &gt; Workspace &gt; API Keys\'에서 만들 수 있습니다.</string>
+  <string name="morphe_vot_openrouter_api_key_summary">OpenRouter API 키입니다. API 키는 \'OpenRouter.ai &gt; Workspace &gt; API Keys\'에서 만들 수 있습니다</string>
   <string name="morphe_vot_openrouter_model_title">OpenRouter 모델</string>
   <string name="morphe_vot_openrouter_model_custom">사용자 정의</string>
   <string name="morphe_vot_openrouter_not_configured_title">OpenRouter가 설정되지 않았습니다</string>
@@ -1074,9 +1074,9 @@ ReturnYouTubeDislike.com을 열려면 여기를 탭하세요."</string>
   <string name="morphe_sb_color_opacity_label">불투명도:</string>
   <string name="morphe_sb_color_dot_label">색상:</string>
   <string name="morphe_sb_about_title">정보</string>
-  <string name="morphe_sb_about_api_summary">"데이터는 SponsorBlock API에서 제공합니다.
+  <string name="morphe_sb_about_api_summary">"데이터는 SponsorBlock API에서 제공합니다
 
-자세한 내용 및 다른 플랫폼용 다운로드를 확인하려면 여기를 탭하여 Sponsor.ajay.app를 여세요."</string>
+자세한 정보 및 다른 플랫폼용 다운로드를 확인하려면 여기를 탭하여 'Sponsor.ajay.app'으로 이동하세요"</string>
   <!-- layout.formfactor.changeFormFactorPatch -->
   <string name="morphe_change_form_factor_title">기기 레이아웃</string>
   <string name="morphe_change_form_factor_entry_1">기본값</string>
@@ -1231,7 +1231,7 @@ ReturnYouTubeDislike.com을 열려면 여기를 탭하세요."</string>
 
 이 설정을 활성화하면 동영상 URL이 API 서버로 전송되며, 다른 데이터는 전송되지 않습니다. 동영상에 DeArrow 썸네일이 없는 경우에는 원본 썸네일 또는 스틸 컷 썸네일이 표시됩니다
 
-여기를 탭하여 DeArrow.ajay.app를 여세요"</string>
+자세한 정보를 보려면 여기를 탭하여 'DeArrow.ajay.app'으로 이동하세요"</string>
   <string name="morphe_alt_thumbnail_dearrow_connection_toast_title">연결 오류 알림 표시하기</string>
   <string name="morphe_alt_thumbnail_dearrow_connection_toast_summary">DeArrow 서버를 사용할 수 없을 경우에 알림을 표시합니다</string>
   <string name="morphe_alt_thumbnail_dearrow_api_url_title">DeArrow API 엔드포인트</string>
