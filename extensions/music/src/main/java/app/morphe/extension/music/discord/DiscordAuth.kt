@@ -9,16 +9,13 @@ import androidx.core.net.toUri
 import app.morphe.extension.music.discord.DiscordDefaults.DISCORD_OAUTH_AUTHORIZE
 import app.morphe.extension.music.discord.DiscordDefaults.DISCORD_OAUTH_TOKEN
 import app.morphe.extension.music.discord.DiscordDefaults.DISCORD_SCOPES
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
-import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.request.forms.submitForm
-import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.parameters
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import okhttp3.OkHttpClient
+import okhttp3.FormBody
+import okhttp3.Request
 import org.json.JSONObject
 import timber.log.Timber
 import java.io.IOException
@@ -26,6 +23,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.concurrent.TimeUnit
 
 data class DiscordAuthResult(
     val accessToken: String,
@@ -45,7 +43,7 @@ sealed class DiscordAuthException(message: String, cause: Throwable? = null) : E
 }
 
 class DiscordAuth(
-    private val httpClient: HttpClient = defaultClient(),
+    private val httpClient: OkHttpClient = defaultClient(),
 ) {
 
     suspend fun authorize(activity: Activity): DiscordAuthResult {
@@ -108,7 +106,7 @@ class DiscordAuth(
     }
 
     fun close() {
-        runCatching { httpClient.close() }
+        // OkHttpClient doesn't need explicit close, but we can let it be
     }
 
     suspend fun refresh(refreshToken: String): DiscordAuthResult = refreshAccessToken(refreshToken)
@@ -119,73 +117,84 @@ class DiscordAuth(
         redirectUri: String,
     ): DiscordAuthResult = performTokenExchange(
         grantType = "authorization_code",
-        extraParams = parameters {
-            append("code", code)
-            append("redirect_uri", redirectUri)
-            append("code_verifier", verifier)
-        },
+        extraParams = mapOf(
+            "code" to code,
+            "redirect_uri" to redirectUri,
+            "code_verifier" to verifier
+        ),
     )
 
     private suspend fun refreshAccessToken(refreshToken: String): DiscordAuthResult =
         performTokenExchange(
             grantType = "refresh_token",
-            extraParams = parameters {
-                append("refresh_token", refreshToken)
-            },
+            extraParams = mapOf(
+                "refresh_token" to refreshToken
+            ),
         )
 
     private suspend fun performTokenExchange(
         grantType: String,
-        extraParams: io.ktor.http.Parameters,
-    ): DiscordAuthResult {
-        val response: HttpResponse = httpClient.submitForm(
-            url = DISCORD_OAUTH_TOKEN,
-            formParameters = parameters {
-                append("client_id", DiscordDefaults.APP_ID)
-                append("grant_type", grantType)
-                extraParams.forEach { name, values ->
-                    values.forEach { value -> append(name, value) }
-                }
-            },
-        )
+        extraParams: Map<String, String>,
+    ): DiscordAuthResult = withContext(Dispatchers.IO) {
+        val formBodyBuilder = FormBody.Builder()
+            .add("client_id", DiscordDefaults.APP_ID)
+            .add("grant_type", grantType)
 
-        val status = response.status
-        val body = response.bodyAsText()
-
-        if (status.value in 200..299) {
-            val json = JSONObject(body)
-            val accessToken = json.getString("access_token")
-            val refreshToken = json.optString("refresh_token", "")
-            val expiresIn = json.optLong("expires_in", 0L)
-            val scope = json.optString("scope", DISCORD_SCOPES)
-            Timber.tag(TAG).i(
-                "token exchange: success (accessToken length=%d, refreshToken present=%s, expiresIn=%d)",
-                accessToken.length,
-                refreshToken.isNotEmpty(),
-                expiresIn,
-            )
-            return DiscordAuthResult(
-                accessToken = accessToken,
-                refreshToken = refreshToken,
-                expiresInSec = expiresIn,
-                scope = scope,
-            )
+        extraParams.forEach { (key, value) ->
+            formBodyBuilder.add(key, value)
         }
 
-        val errorCode = runCatching { JSONObject(body).optString("error", "") }
-            .getOrDefault("")
-        if (status == HttpStatusCode.BadRequest && errorCode == "invalid_grant") {
-            Timber.tag(TAG).w("token exchange: invalid_grant on %s", grantType)
-            throw DiscordAuthException.InvalidGrant()
+        val request = Request.Builder()
+            .url(DISCORD_OAUTH_TOKEN)
+            .post(formBodyBuilder.build())
+            .build()
+
+        val response = try {
+            httpClient.newCall(request).execute()
+        } catch (e: Exception) {
+            Timber.tag(TAG).w(e, "token exchange: network failure")
+            throw DiscordAuthException.NetworkFailure(e)
         }
-        Timber.tag(TAG).w(
-            "token exchange: HTTP %d (grantType=%s, error=%s, body=%s)",
-            status.value,
-            grantType,
-            errorCode,
-            body.take(200),
-        )
-        throw DiscordAuthException.NetworkFailure(IOException("HTTP ${status.value}: $body"))
+
+        response.use { resp ->
+            val code = resp.code
+            val body = resp.body?.string().orEmpty()
+
+            if (resp.isSuccessful) {
+                val json = JSONObject(body)
+                val accessToken = json.getString("access_token")
+                val refreshToken = json.optString("refresh_token", "")
+                val expiresIn = json.optLong("expires_in", 0L)
+                val scope = json.optString("scope", DISCORD_SCOPES)
+                Timber.tag(TAG).i(
+                    "token exchange: success (accessToken length=%d, refreshToken present=%s, expiresIn=%d)",
+                    accessToken.length,
+                    refreshToken.isNotEmpty(),
+                    expiresIn,
+                )
+                return@withContext DiscordAuthResult(
+                    accessToken = accessToken,
+                    refreshToken = refreshToken,
+                    expiresInSec = expiresIn,
+                    scope = scope,
+                )
+            }
+
+            val errorCode = runCatching { JSONObject(body).optString("error", "") }
+                .getOrDefault("")
+            if (code == 400 && errorCode == "invalid_grant") {
+                Timber.tag(TAG).w("token exchange: invalid_grant on %s", grantType)
+                throw DiscordAuthException.InvalidGrant()
+            }
+            Timber.tag(TAG).w(
+                "token exchange: HTTP %d (grantType=%s, error=%s, body=%s)",
+                code,
+                grantType,
+                errorCode,
+                body.take(200),
+            )
+            throw DiscordAuthException.NetworkFailure(IOException("HTTP $code: $body"))
+        }
     }
 
     private fun buildAuthorizeUrl(
@@ -212,14 +221,11 @@ class DiscordAuth(
         private const val TAG = "DiscordSvc"
         const val REDIRECT_URI = "metrolistdiscord://oauth2/callback"
 
-        private fun defaultClient(): HttpClient = HttpClient(CIO) {
-            install(HttpTimeout) {
-                requestTimeoutMillis = 15_000L
-                connectTimeoutMillis = 10_000L
-                socketTimeoutMillis = 15_000L
-            }
-            expectSuccess = false
-        }
+        private fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .writeTimeout(15, TimeUnit.SECONDS)
+            .build()
 
         fun generatePkcePair(): PkcePair {
             val bytes = ByteArray(64)

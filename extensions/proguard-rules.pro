@@ -13,3 +13,6 @@
 }
 -dontwarn java.lang.reflect.AnnotatedType
 -dontwarn javax.lang.model.element.Modifier
+-dontwarn org.slf4j.**
+-keep class kotlinx.coroutines.** { *; }
+-keep class androidx.lifecycle.** { *; }

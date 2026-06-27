@@ -36,6 +36,7 @@ import app.morphe.util.copyResources
 import app.morphe.util.copyXmlNode
 import app.morphe.util.inputStreamFromBundledResource
 import app.morphe.util.insertLiteralOverride
+import org.w3c.dom.Element
 
 private const val MUSIC_ACTIVITY_HOOK_CLASS = "Lapp/morphe/extension/music/settings/MusicActivityHook;"
 
@@ -101,6 +102,48 @@ private val settingsResourcePatch = resourcePatch {
                     "allowDividerBelow\">false"
                 )
         )
+
+        // Register DiscordOAuthActivity in the manifest
+        document("AndroidManifest.xml").use { document ->
+            val application = document.getElementsByTagName("application").item(0) as Element
+            val activities = document.getElementsByTagName("activity")
+            var exists = false
+            for (i in 0 until activities.length) {
+                val act = activities.item(i) as Element
+                if (act.getAttribute("android:name") == "app.morphe.extension.music.discord.DiscordOAuthActivity") {
+                    exists = true
+                    break
+                }
+            }
+            if (!exists) {
+                val activity = document.createElement("activity")
+                activity.setAttribute("android:name", "app.morphe.extension.music.discord.DiscordOAuthActivity")
+                activity.setAttribute("android:exported", "true")
+
+                val intentFilter = document.createElement("intent-filter")
+
+                val action = document.createElement("action")
+                action.setAttribute("android:name", "android.intent.action.VIEW")
+                intentFilter.appendChild(action)
+
+                val categoryDefault = document.createElement("category")
+                categoryDefault.setAttribute("android:name", "android.intent.category.DEFAULT")
+                intentFilter.appendChild(categoryDefault)
+
+                val categoryBrowsable = document.createElement("category")
+                categoryBrowsable.setAttribute("android:name", "android.intent.category.BROWSABLE")
+                intentFilter.appendChild(categoryBrowsable)
+
+                val data = document.createElement("data")
+                data.setAttribute("android:scheme", "metrolistdiscord")
+                data.setAttribute("android:host", "oauth2")
+                data.setAttribute("android:path", "/callback")
+                intentFilter.appendChild(data)
+
+                activity.appendChild(intentFilter)
+                application.appendChild(activity)
+            }
+        }
     }
 }
 
@@ -144,7 +187,59 @@ val settingsPatch = bytecodePatch(
             SwitchPreference("morphe_show_menu_icons")
         )
 
+        val discordRpcScreen = PreferenceScreenPreference(
+            key = "morphe_settings_music_screen_5_discord_rpc",
+            titleKey = "morphe_settings_music_screen_5_discord_rpc_title",
+            summaryKey = "morphe_music_discord_rpc_screen_summary",
+            icon = "@drawable/morphe_settings_screen_11_misc",
+            iconBold = "@drawable/morphe_settings_screen_11_misc_bold",
+            layout = "@layout/morphe_preference_with_icon",
+            preferences = setOf(
+                SwitchPreference("morphe_music_discord_rpc_enabled"),
+                NonInteractivePreference(
+                    key = "morphe_music_discord_rpc_token",
+                    titleKey = "morphe_music_discord_rpc_token_title",
+                    summaryKey = null,
+                    tag = "app.morphe.extension.music.settings.preference.DiscordTokenPreference"
+                ),
+                SwitchPreference("morphe_music_discord_rpc_advanced"),
+                TextPreference(
+                    key = "morphe_music_discord_rpc_state_template",
+                    titleKey = "morphe_music_discord_rpc_state_template_title",
+                    summaryKey = "morphe_music_discord_rpc_state_template_summary"
+                ),
+                TextPreference(
+                    key = "morphe_music_discord_rpc_details_template",
+                    titleKey = "morphe_music_discord_rpc_details_template_title",
+                    summaryKey = "morphe_music_discord_rpc_details_template_summary"
+                ),
+                SwitchPreference("morphe_music_discord_rpc_button1_enabled"),
+                TextPreference(
+                    key = "morphe_music_discord_rpc_button1_label",
+                    titleKey = "morphe_music_discord_rpc_button1_label_title",
+                    summaryKey = null
+                ),
+                TextPreference(
+                    key = "morphe_music_discord_rpc_button1_url",
+                    titleKey = "morphe_music_discord_rpc_button1_url_title",
+                    summaryKey = null
+                ),
+                SwitchPreference("morphe_music_discord_rpc_button2_enabled"),
+                TextPreference(
+                    key = "morphe_music_discord_rpc_button2_label",
+                    titleKey = "morphe_music_discord_rpc_button2_label_title",
+                    summaryKey = null
+                ),
+                TextPreference(
+                    key = "morphe_music_discord_rpc_button2_url",
+                    titleKey = "morphe_music_discord_rpc_button2_url_title",
+                    summaryKey = null
+                )
+            )
+        )
+
         PreferenceScreen.MISC.addPreferences(
+            discordRpcScreen,
             TextPreference(
                 key = null,
                 titleKey = "morphe_pref_import_export_title",

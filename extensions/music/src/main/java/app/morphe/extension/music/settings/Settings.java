@@ -12,6 +12,7 @@ import app.morphe.extension.music.patches.CrossfadeManager.FadeCurve;
 import app.morphe.extension.shared.settings.BooleanSetting;
 import app.morphe.extension.shared.settings.EnumSetting;
 import app.morphe.extension.shared.settings.SharedYouTubeSettings;
+import app.morphe.extension.shared.settings.StringSetting;
 import app.morphe.extension.shared.spoof.ClientType;
 
 @SuppressWarnings({"deprecation", "RedundantSuppression"})
@@ -58,5 +59,17 @@ public class Settings extends SharedYouTubeSettings {
             ClientType.ANDROID_REEL_NO_AUTH, true, parent(SPOOF_VIDEO_STREAMS));
 
     public static final BooleanSetting FORCE_ORIGINAL_AUDIO = new BooleanSetting("morphe_force_original_audio", TRUE, true);
+
+    // Discord RPC
+    public static final BooleanSetting DISCORD_RPC_ENABLED = new BooleanSetting("morphe_music_discord_rpc_enabled", FALSE, true);
+    public static final BooleanSetting DISCORD_RPC_ADVANCED = new BooleanSetting("morphe_music_discord_rpc_advanced", FALSE, true);
+    public static final StringSetting DISCORD_RPC_STATE_TEMPLATE = new StringSetting("morphe_music_discord_rpc_state_template", "{artist.name}");
+    public static final StringSetting DISCORD_RPC_DETAILS_TEMPLATE = new StringSetting("morphe_music_discord_rpc_details_template", "{song.name}");
+    public static final BooleanSetting DISCORD_RPC_BUTTON1_ENABLED = new BooleanSetting("morphe_music_discord_rpc_button1_enabled", TRUE, true);
+    public static final StringSetting DISCORD_RPC_BUTTON1_LABEL = new StringSetting("morphe_music_discord_rpc_button1_label", "Listen on YouTube Music");
+    public static final StringSetting DISCORD_RPC_BUTTON1_URL = new StringSetting("morphe_music_discord_rpc_button1_url", "https://music.youtube.com/watch?v={song.id}");
+    public static final BooleanSetting DISCORD_RPC_BUTTON2_ENABLED = new BooleanSetting("morphe_music_discord_rpc_button2_enabled", TRUE, true);
+    public static final StringSetting DISCORD_RPC_BUTTON2_LABEL = new StringSetting("morphe_music_discord_rpc_button2_label", "Visit Morphe");
+    public static final StringSetting DISCORD_RPC_BUTTON2_URL = new StringSetting("morphe_music_discord_rpc_button2_url", "https://github.com/MorpheApp/Morphe");
 
 }
