@@ -1,7 +1,5 @@
 package app.morphe.extension.music.discord
 
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.encodeToString
 import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 import okhttp3.OkHttpClient
@@ -11,6 +9,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import org.json.JSONArray
+import org.json.JSONObject
 
 object DiscordExternalAssets {
 
@@ -18,7 +18,6 @@ object DiscordExternalAssets {
     private const val EXTERNAL_ASSETS_API =
         "https://discord.com/api/v9/applications/%s/external-assets"
 
-    private val json = Json { ignoreUnknownKeys = true }
     private val cache = ConcurrentHashMap<String, String>()
     private const val CACHE_MAX_SIZE = 128
 
@@ -39,16 +38,19 @@ object DiscordExternalAssets {
         if (imageUrl.startsWith("mp:")) return@withContext imageUrl
 
         cache[imageUrl]?.let {
-            Timber.tag(TAG).d("resolve: cache hit for %s -> %s", imageUrl.take(60), it)
+            android.util.Log.e("DiscordSvc", "resolve: cache hit for ${imageUrl.take(60)} -> $it")
             return@withContext it
         }
-        Timber.tag(TAG).d("resolve: cache miss for %s, calling API", imageUrl.take(60))
+        android.util.Log.e("DiscordSvc", "resolve: cache miss for $imageUrl, calling API")
 
         return@withContext try {
             val mediaType = "application/json; charset=utf-8".toMediaType()
-            val requestBody = json.encodeToString<ExternalAssetRequest>(
-                ExternalAssetRequest(listOf(imageUrl))
-            ).toRequestBody(mediaType)
+            
+            // Construct request JSON using org.json.JSONObject
+            val requestJson = JSONObject().apply {
+                put("urls", JSONArray(listOf(imageUrl)))
+            }
+            val requestBody = requestJson.toString().toRequestBody(mediaType)
 
             val request = Request.Builder()
                 .url(EXTERNAL_ASSETS_API.format(appId))
@@ -63,26 +65,29 @@ object DiscordExternalAssets {
                 val statusCode = resp.code
                 val body = resp.body?.string().orEmpty()
 
+                android.util.Log.e("DiscordSvc", "external-assets: HTTP $statusCode for $imageUrl, body=$body")
+
                 if (resp.isSuccessful && body.isNotBlank()) {
-                    val parsed = json.decodeFromString<List<ExternalAssetResponse>>(body)
-                    val assetPath = parsed.firstOrNull()?.externalAssetPath
+                    val array = JSONArray(body)
+                    val firstObj = if (array.length() > 0) array.getJSONObject(0) else null
+                    val assetPath = firstObj?.optString("external_asset_path")
                     if (assetPath != null) {
                         val result = "mp:$assetPath"
                         cache[imageUrl] = result
                         trimCache()
-                        Timber.tag(TAG).i("external-assets: resolved %s -> %s", imageUrl.take(60), result)
+                        android.util.Log.e("DiscordSvc", "external-assets: resolved $imageUrl -> $result")
                         result
                     } else {
-                        Timber.tag(TAG).w("external-assets: no path in response for %s: %s", imageUrl.take(60), body.take(200))
+                        android.util.Log.w("DiscordSvc", "external-assets: no path in response for $imageUrl: $body")
                         null
                     }
                 } else {
-                    Timber.tag(TAG).w("external-assets: HTTP %d for %s: %s", statusCode, imageUrl.take(60), body.take(200))
+                    android.util.Log.w("DiscordSvc", "external-assets: HTTP $statusCode for $imageUrl: $body")
                     null
                 }
             }
         } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "external-assets: failed for %s", imageUrl.take(60))
+            android.util.Log.e("DiscordSvc", "external-assets: failed for $imageUrl", e)
             null
         }
     }
@@ -102,16 +107,4 @@ object DiscordExternalAssets {
     fun close() {
         // OkHttpClient does not need explicit close
     }
-
-    @kotlinx.serialization.Serializable
-    private data class ExternalAssetRequest(
-        val urls: List<String>,
-    )
-
-    @kotlinx.serialization.Serializable
-    private data class ExternalAssetResponse(
-        val url: String? = null,
-        @kotlinx.serialization.SerialName("external_asset_path")
-        val externalAssetPath: String? = null,
-    )
 }

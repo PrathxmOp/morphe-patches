@@ -133,6 +133,9 @@ object DiscordRpcManager {
     }
 
     fun init(context: Context) {
+        if (Timber.forest().isEmpty()) {
+            Timber.plant(Timber.DebugTree())
+        }
         DiscordTokenStore.init(context.applicationContext)
         if (initialized && scope.isActive) {
             Timber.tag(TAG).i("init: already initialized and active, skipping")
@@ -317,65 +320,43 @@ object DiscordRpcManager {
             Timber.tag(TAG).v("setActivity: debounced (<2s since last, stateChanged=%s)", stateChanged)
             return
         }
-        lastActivitySentAtMs = now
 
         currentSongId = songId
         currentIsPlaying = isPlaying
-        currentActivityId.incrementAndGet()
+        val activityIdAtLaunch = currentActivityId.incrementAndGet()
         currentActivityHadImages = !activity.largeImage.isNullOrEmpty() || !activity.smallImage.isNullOrEmpty()
 
         val buttons = buildList {
             if (!activity.button1Label.isNullOrEmpty() && !activity.button1Url.isNullOrEmpty()) {
-                add(activity.button1Label to activity.button1Url)
+                val url = activity.button1Url
+                if (url.startsWith("http") && !url.endsWith("v=") && !url.contains("{song.id}")) {
+                    add(activity.button1Label to url)
+                }
             }
             if (!activity.button2Label.isNullOrEmpty() && !activity.button2Url.isNullOrEmpty()) {
-                add(activity.button2Label to activity.button2Url)
+                val url = activity.button2Url
+                if (url.startsWith("http") && !url.contains("{song.id}")) {
+                    add(activity.button2Label to url)
+                }
             }
-        }
-        val payloadNoImages = DiscordPresence.buildActivity(
-            name = activity.name.orEmpty(),
-            type = activityTypeToEnum(activity.activityType),
-            details = activity.details,
-            state = activity.state,
-            startMs = activity.startTimestamp.takeIf { it > 0L },
-            endMs = activity.endTimestamp?.takeIf { it > 0L },
-            buttons = buttons,
-        )
-
-        lastActivity = payloadNoImages
-
-        try {
-            val presenceJson = DiscordPresence.buildPresenceUpdate(
-                status = status,
-                activities = listOf(payloadNoImages),
-            )
-            Timber.tag(TAG).i("setActivity: sending (type=%d, name=%s, details=%s, state=%s, songId=%s, isPlaying=%s, buttons=%d)",
-                activity.activityType, activity.name, activity.details, activity.state, songId, isPlaying, buttons.size)
-            gateway.presenceUpdate(presenceJson)
-        } catch (e: IllegalStateException) {
-            Timber.tag(TAG).w(e, "setActivity: gateway not open")
-        } catch (e: Throwable) {
-            Timber.tag(TAG).e(e, "setActivity: send failed")
         }
 
         imageResolutionJob?.cancel()
 
-        val currentToken = accessToken ?: return
+        val currentToken = accessToken
         val largeImageUrl = activity.largeImage
         val smallImageUrl = activity.smallImage
-        if (largeImageUrl.isNullOrEmpty() && smallImageUrl.isNullOrEmpty()) return
 
-        Timber.tag(TAG).d(
-            "setActivity: resolving images — large=%s, small=%s",
-            largeImageUrl?.take(80),
-            smallImageUrl?.take(80),
-        )
-
-        val activityIdAtLaunch = currentActivityId.get()
-        val songIdAtLaunch = songId
+        if (currentToken == null || (largeImageUrl.isNullOrEmpty() && smallImageUrl.isNullOrEmpty())) {
+            sendActivityPayload(activity, null, null, buttons, status)
+            lastActivitySentAtMs = System.currentTimeMillis()
+            return
+        }
 
         imageResolutionJob = scope.launch {
             val tokenHeader = "Bearer $currentToken"
+            android.util.Log.e("DiscordSvc", "setActivity: starting image resolution. largeImageUrl=$largeImageUrl, appId=$appId")
+            
             val largeResolved = if (!largeImageUrl.isNullOrEmpty()) {
                 DiscordExternalAssets.resolve(largeImageUrl, appId, tokenHeader)
             } else null
@@ -383,47 +364,56 @@ object DiscordRpcManager {
                 DiscordExternalAssets.resolve(smallImageUrl, appId, tokenHeader)
             } else null
 
-            if (largeResolved == null && smallResolved == null) {
-                Timber.tag(TAG).i("setActivity: image resolution returned null, keeping text-only presence")
-                return@launch
-            }
+            android.util.Log.e("DiscordSvc", "setActivity: image resolution finished. largeResolved=$largeResolved, smallResolved=$smallResolved")
 
             if (activityIdAtLaunch != currentActivityId.get()) {
                 Timber.tag(TAG).i(
-                    "setActivity: stale image resolution (launched activityId=%d, current=%d), skipping re-send",
-                    activityIdAtLaunch, currentActivityId.get(),
+                    "setActivity: stale image resolution (launched activityId=%d, current=%d), skipping send",
+                    activityIdAtLaunch, currentActivityId.get()
                 )
                 return@launch
             }
 
-            val payloadWithImages = DiscordPresence.buildActivity(
-                name = activity.name.orEmpty(),
-                type = activityTypeToEnum(activity.activityType),
-                details = activity.details,
-                state = activity.state,
-                largeImage = largeResolved,
-                largeText = activity.largeText,
-                smallImage = smallResolved,
-                smallText = activity.smallText,
-                startMs = activity.startTimestamp.takeIf { it > 0L },
-                endMs = activity.endTimestamp?.takeIf { it > 0L },
-                buttons = buttons,
+            sendActivityPayload(activity, largeResolved, smallResolved, buttons, status)
+            lastActivitySentAtMs = System.currentTimeMillis()
+        }
+    }
+
+    private fun sendActivityPayload(
+        activity: DiscordActivity,
+        largeImage: String?,
+        smallImage: String?,
+        buttons: List<Pair<String, String>>,
+        status: PresenceStatus
+    ) {
+        val payload = DiscordPresence.buildActivity(
+            name = activity.name.orEmpty(),
+            type = activityTypeToEnum(activity.activityType),
+            details = activity.details,
+            state = activity.state,
+            largeImage = largeImage,
+            largeText = activity.largeText,
+            smallImage = smallImage,
+            smallText = activity.smallText,
+            startMs = activity.startTimestamp.takeIf { it > 0L },
+            endMs = activity.endTimestamp?.takeIf { it > 0L },
+            buttons = buttons,
+        )
+
+        lastActivity = payload
+
+        try {
+            val presenceJson = DiscordPresence.buildPresenceUpdate(
+                status = status,
+                activities = listOf(payload),
             )
-
-            lastActivity = payloadWithImages
-
-            try {
-                val presenceJson = DiscordPresence.buildPresenceUpdate(
-                    status = status,
-                    activities = listOf(payloadWithImages),
-                )
-                Timber.tag(TAG).i("setActivity: re-sending with images for songId=%s", songIdAtLaunch)
-                gateway.presenceUpdate(presenceJson)
-            } catch (e: IllegalStateException) {
-                Timber.tag(TAG).w(e, "setActivity: image re-send gateway not open")
-            } catch (e: Throwable) {
-                Timber.tag(TAG).e(e, "setActivity: image re-send failed")
-            }
+            Timber.tag(TAG).i("setActivity: sending (type=%d, name=%s, details=%s, state=%s, songId=%s, largeImage=%s, buttons=%d)",
+                activity.activityType, activity.name, activity.details, activity.state, currentSongId, largeImage, buttons.size)
+            gateway.presenceUpdate(presenceJson)
+        } catch (e: IllegalStateException) {
+            Timber.tag(TAG).w(e, "setActivity: gateway not open")
+        } catch (e: Throwable) {
+            Timber.tag(TAG).e(e, "setActivity: send failed")
         }
     }
 
@@ -464,6 +454,10 @@ object DiscordRpcManager {
 
         scope.launch {
             reconnectMutex.withLock {
+                if ((_connectionStatus.value == Status.Connected || _connectionStatus.value == Status.Authorizing) && accessToken == token) {
+                    Timber.tag(TAG).i("reconnectWithToken: already connected or connecting with this token, skipping")
+                    return@withLock
+                }
                 accessToken = token
                 _accessTokenFlow.value = token
                 DiscordTokenStore.storeAccessToken(token)

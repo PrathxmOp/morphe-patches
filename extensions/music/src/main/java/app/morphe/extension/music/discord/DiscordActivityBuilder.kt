@@ -68,8 +68,13 @@ object DiscordActivityBuilder {
         } else {
             state = artistName
             details = songTitle
-            renderedBtn1Label = DiscordDefaults.BUTTON1_LABEL
-            renderedBtn1Url = "${DiscordDefaults.YOUTUBE_WATCH_URL}${song.id}"
+            if (song.id.isNotEmpty()) {
+                renderedBtn1Label = DiscordDefaults.BUTTON1_LABEL
+                renderedBtn1Url = "${DiscordDefaults.YOUTUBE_WATCH_URL}${song.id}"
+            } else {
+                renderedBtn1Label = null
+                renderedBtn1Url = null
+            }
             renderedBtn2Label = DiscordDefaults.BUTTON2_LABEL
             renderedBtn2Url = DiscordDefaults.BUTTON2_URL
         }

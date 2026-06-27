@@ -175,8 +175,6 @@ YouTube Music 8.x — crossfade only runs on 9.x and newer"</string>
     <string name="morphe_music_discord_rpc_screen_title">Discord Rich Presence</string>
     <string name="morphe_music_discord_rpc_screen_summary">Show what you are listening to on your Discord profile</string>
     <string name="morphe_music_discord_rpc_enabled_title">Enable Discord RPC</string>
-    <string name="morphe_music_discord_rpc_advanced_title">Advanced Mode</string>
-    <string name="morphe_music_discord_rpc_advanced_summary">Use templates for richer presence configuration</string>
     <string name="morphe_music_discord_rpc_token_title">Discord Account</string>
     <string name="morphe_music_discord_rpc_token_summary_logged_in">Linked</string>
     <string name="morphe_music_discord_rpc_token_summary_logged_out">Not Linked</string>
@@ -188,16 +186,11 @@ YouTube Music 8.x — crossfade only runs on 9.x and newer"</string>
     <string name="morphe_music_discord_rpc_token_status_linking">Linking account...</string>
     <string name="morphe_music_discord_rpc_token_status_success">Account linked successfully!</string>
     <string name="morphe_music_discord_rpc_token_status_error">Failed to link account: %s</string>
+    <string name="morphe_music_discord_rpc_customization_title">Customization</string>
     <string name="morphe_music_discord_rpc_state_template_title">State Template</string>
     <string name="morphe_music_discord_rpc_state_template_summary">Customize presence state text. Example: {artist.name}</string>
     <string name="morphe_music_discord_rpc_details_template_title">Details Template</string>
     <string name="morphe_music_discord_rpc_details_template_summary">Customize presence details text. Example: {song.name}</string>
-    <string name="morphe_music_discord_rpc_button1_enabled_title">Enable Button 1</string>
-    <string name="morphe_music_discord_rpc_button1_label_title">Button 1 Label</string>
-    <string name="morphe_music_discord_rpc_button1_url_title">Button 1 URL</string>
-    <string name="morphe_music_discord_rpc_button2_enabled_title">Enable Button 2</string>
-    <string name="morphe_music_discord_rpc_button2_label_title">Button 2 Label</string>
-    <string name="morphe_music_discord_rpc_button2_url_title">Button 2 URL</string>
 
     <!-- interaction.scrobbling.scrobblingPatch -->
     <string name="morphe_music_scrobbling_title" translatable="false">Scrobbling</string>

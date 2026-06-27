@@ -52,7 +52,7 @@ fun hookVideoId(
  */
 fun hookBackgroundPlayVideoId(
     methodDescriptor: String,
-) = backgroundPlaybackMethodRef.get()!!.addInstruction(
+) = backgroundPlaybackMethodRef?.get()?.addInstruction(
     backgroundPlaybackInsertIndex++, // move-result-object offset
     "invoke-static {v$backgroundPlaybackVideoIdRegister}, $methodDescriptor",
 )
@@ -116,7 +116,7 @@ private lateinit var videoIdMethodRef : WeakReference<MutableMethod>
 private var videoIdRegister = -1
 private var videoIdInsertIndex = -1
 
-private lateinit var backgroundPlaybackMethodRef : WeakReference<MutableMethod>
+private var backgroundPlaybackMethodRef : WeakReference<MutableMethod>? = null
 private var backgroundPlaybackVideoIdRegister = -1
 private var backgroundPlaybackInsertIndex = -1
 
@@ -138,13 +138,17 @@ val videoIdPatch = bytecodePatch(
             }
         }
 
-        VideoIdBackgroundPlayFingerprint.let {
-            it.method.apply {
-                backgroundPlaybackMethodRef = WeakReference(this)
-                val index = it.instructionMatches.first().index
-                backgroundPlaybackVideoIdRegister = getInstruction<OneRegisterInstruction>(index + 1).registerA
-                backgroundPlaybackInsertIndex = index + 2
+        try {
+            VideoIdBackgroundPlayFingerprint.let {
+                it.method.apply {
+                    backgroundPlaybackMethodRef = WeakReference(this)
+                    val index = it.instructionMatches.first().index
+                    backgroundPlaybackVideoIdRegister = getInstruction<OneRegisterInstruction>(index + 1).registerA
+                    backgroundPlaybackInsertIndex = index + 2
+                }
             }
+        } catch (e: Throwable) {
+            // Optional fingerprint for background playback (e.g. YouTube Music doesn't have/need this)
         }
     }
 }

@@ -73,7 +73,9 @@ private val settingsResourcePatch = resourcePatch {
                 "morphe_settings_screen_11_misc.xml",
                 "morphe_settings_screen_11_misc_bold.xml",
                 "morphe_settings_music_screen_05_scrobbling.xml",
-                "morphe_settings_music_screen_05_scrobbling_bold.xml"
+                "morphe_settings_music_screen_05_scrobbling_bold.xml",
+                "morphe_settings_music_screen_06_discord.xml",
+                "morphe_settings_music_screen_06_discord_bold.xml"
             ),
             ResourceGroup("layout",
                 "morphe_preference_with_icon.xml"
@@ -190,59 +192,7 @@ val settingsPatch = bytecodePatch(
             SwitchPreference("morphe_show_menu_icons")
         )
 
-        val discordRpcScreen = PreferenceScreenPreference(
-            key = "morphe_settings_music_screen_5_discord_rpc",
-            titleKey = "morphe_settings_music_screen_5_discord_rpc_title",
-            summaryKey = "morphe_music_discord_rpc_screen_summary",
-            icon = "@drawable/morphe_settings_screen_11_misc",
-            iconBold = "@drawable/morphe_settings_screen_11_misc_bold",
-            layout = "@layout/morphe_preference_with_icon",
-            preferences = setOf(
-                SwitchPreference("morphe_music_discord_rpc_enabled"),
-                NonInteractivePreference(
-                    key = "morphe_music_discord_rpc_token",
-                    titleKey = "morphe_music_discord_rpc_token_title",
-                    summaryKey = null,
-                    tag = "app.morphe.extension.music.settings.preference.DiscordTokenPreference"
-                ),
-                SwitchPreference("morphe_music_discord_rpc_advanced"),
-                TextPreference(
-                    key = "morphe_music_discord_rpc_state_template",
-                    titleKey = "morphe_music_discord_rpc_state_template_title",
-                    summaryKey = "morphe_music_discord_rpc_state_template_summary"
-                ),
-                TextPreference(
-                    key = "morphe_music_discord_rpc_details_template",
-                    titleKey = "morphe_music_discord_rpc_details_template_title",
-                    summaryKey = "morphe_music_discord_rpc_details_template_summary"
-                ),
-                SwitchPreference("morphe_music_discord_rpc_button1_enabled"),
-                TextPreference(
-                    key = "morphe_music_discord_rpc_button1_label",
-                    titleKey = "morphe_music_discord_rpc_button1_label_title",
-                    summaryKey = null
-                ),
-                TextPreference(
-                    key = "morphe_music_discord_rpc_button1_url",
-                    titleKey = "morphe_music_discord_rpc_button1_url_title",
-                    summaryKey = null
-                ),
-                SwitchPreference("morphe_music_discord_rpc_button2_enabled"),
-                TextPreference(
-                    key = "morphe_music_discord_rpc_button2_label",
-                    titleKey = "morphe_music_discord_rpc_button2_label_title",
-                    summaryKey = null
-                ),
-                TextPreference(
-                    key = "morphe_music_discord_rpc_button2_url",
-                    titleKey = "morphe_music_discord_rpc_button2_url_title",
-                    summaryKey = null
-                )
-            )
-        )
-
         PreferenceScreen.MISC.addPreferences(
-            discordRpcScreen,
             TextPreference(
                 key = null,
                 titleKey = "morphe_pref_import_export_title",
@@ -312,6 +262,15 @@ object PreferenceScreen : BasePreferenceScreen() {
         summaryKey = null,
         icon = "@drawable/morphe_settings_music_screen_05_scrobbling",
         iconBold = "@drawable/morphe_settings_music_screen_05_scrobbling_bold",
+        layout = "@layout/morphe_preference_with_icon",
+        sorting = Sorting.UNSORTED
+    )
+    val DISCORD_RPC = Screen(
+        key = "morphe_settings_music_screen_5_discord_rpc",
+        titleKey = "morphe_settings_music_screen_5_discord_rpc_title",
+        summaryKey = "morphe_music_discord_rpc_screen_summary",
+        icon = "@drawable/morphe_settings_music_screen_06_discord",
+        iconBold = "@drawable/morphe_settings_music_screen_06_discord_bold",
         layout = "@layout/morphe_preference_with_icon",
         sorting = Sorting.UNSORTED
     )
