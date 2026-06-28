@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -56,6 +57,17 @@ object DiscordRpcManager {
     @Volatile private var imageResolutionJob: Job? = null
     @Volatile private var currentActivityHadImages: Boolean = false
     private val reconnectMutex = Mutex()
+    private const val RECONNECT_BASE_DELAY_MS = 1000L
+    private const val RECONNECT_MAX_DELAY_MS = 64_000L
+    private const val MAX_RECONNECT_ATTEMPTS = 7
+
+    @Volatile
+    private var reconnectAttempts: Int = 0
+
+    @Volatile private var pendingActivity: DiscordActivity? = null
+    @Volatile private var pendingSongId: String? = null
+    @Volatile private var pendingIsPlaying: Boolean = true
+    @Volatile private var pendingStatus: PresenceStatus = PresenceStatus.Online
 
     private val _accessTokenFlow = MutableStateFlow<String?>(null)
     val accessTokenFlow: StateFlow<String?> = _accessTokenFlow
@@ -305,11 +317,19 @@ object DiscordRpcManager {
         status: PresenceStatus = PresenceStatus.Online,
     ) {
         if (!_ready) {
-            Timber.tag(TAG).w("setActivity: skipping — not ready (name=%s)", activity.name)
+            Timber.tag(TAG).w("setActivity: saving pending activity — not ready (name=%s)", activity.name)
+            pendingActivity = activity
+            pendingSongId = songId
+            pendingIsPlaying = isPlaying
+            pendingStatus = status
             return
         }
 
+        pendingActivity = null
+
         val stateChanged = songId != currentSongId || isPlaying != currentIsPlaying ||
+            activity.details != lastActivity?.details ||
+            activity.state != lastActivity?.state ||
             (activity.largeImage != null && activity.largeImage != lastActivity?.largeImage) ||
             (activity.smallImage != null && activity.smallImage != lastActivity?.smallImage)
 
@@ -418,6 +438,7 @@ object DiscordRpcManager {
     }
 
     fun clear() {
+        pendingActivity = null
         if (!_ready) {
             Timber.tag(TAG).w("clear: skipping — not ready")
             return
@@ -462,6 +483,7 @@ object DiscordRpcManager {
                 _accessTokenFlow.value = token
                 DiscordTokenStore.storeAccessToken(token)
                 _connectionStatus.value = Status.Authorizing
+                reconnectAttempts = 0
                 try {
                     val refreshToken = DiscordTokenStore.getRefreshToken()
                     val expiresAt = DiscordTokenStore.getExpiresAt()
@@ -478,86 +500,151 @@ object DiscordRpcManager {
                         needsRefresh,
                     )
 
-                    if (needsRefresh) {
-                        Timber.tag(TAG).i("reconnectWithToken: proactive token refresh")
-                        val refreshed = try {
-                            auth.refresh(refreshToken)
-                        } catch (e: DiscordAuthException.InvalidGrant) {
-                            Timber.tag(TAG).w(e, "reconnectWithToken: refresh invalid_grant, logging out")
-                            _lastError.value = "discord_error_token_refresh_failed"
-                            logout()
-                            return@withLock
-                        } catch (e: Throwable) {
-                            Timber.tag(TAG).w(e, "reconnectWithToken: refresh failed, continuing with old token")
-                            null
-                        }
-                        if (refreshed != null) {
-                            Timber.tag(TAG).i(
-                                "reconnectWithToken: refresh succeeded (new token length=%d, expiresIn=%d)",
-                                refreshed.accessToken.length,
-                                refreshed.expiresInSec,
-                            )
-                            accessToken = refreshed.accessToken
-                            _accessTokenFlow.value = refreshed.accessToken
-                            DiscordTokenStore.storeFull(
-                                refreshed.accessToken,
-                                refreshed.refreshToken,
-                                refreshed.expiresInSec,
-                            )
-                        }
+                    val tokenToUse = if (needsRefresh) {
+                        refreshAccessToken() ?: token
+                    } else {
+                        token
                     }
 
-                    runCatching { gateway.close(4000, "reconnecting") }
-                    gateway.connect()
-                    gateway.identify("Bearer ${accessToken ?: token}")
+                    performConnectAndAuth(tokenToUse, ReconnectAction.ReIdentify)
                 } catch (e: Throwable) {
-                    Timber.tag(TAG).e(e, "reconnectWithToken: connect/identify failed")
-                    _lastError.value = "discord_error_loopback_timeout"
+                    Timber.tag(TAG).e(e, "reconnectWithToken: failed")
                     _connectionStatus.value = Status.Disconnected
                 }
             }
         }
     }
 
-    private suspend fun refreshAndReconnect() {
-        val refreshToken = DiscordTokenStore.getRefreshToken()
-        if (refreshToken.isNullOrEmpty()) {
-            Timber.tag(TAG).w("refreshAndReconnect: no refresh token available, logging out")
-            _lastError.value = "discord_error_token_refresh_failed"
-            logout()
-            return
-        }
-
-        val refreshed = try {
-            auth.refresh(refreshToken)
+    private suspend fun refreshAccessToken(): String? {
+        val refreshToken = DiscordTokenStore.getRefreshToken() ?: return null
+        return try {
+            val refreshed = auth.refresh(refreshToken)
+            Timber.tag(TAG).i("refreshAccessToken: success")
+            DiscordTokenStore.storeFull(
+                refreshed.accessToken,
+                refreshed.refreshToken,
+                refreshed.expiresInSec,
+            )
+            accessToken = refreshed.accessToken
+            _accessTokenFlow.value = refreshed.accessToken
+            refreshed.accessToken
         } catch (e: DiscordAuthException.InvalidGrant) {
-            Timber.tag(TAG).w(e, "refreshAndReconnect: refresh token rejected, logging out")
+            Timber.tag(TAG).w(e, "refreshAccessToken: invalid grant, logging out")
             _lastError.value = "discord_error_token_refresh_failed"
             logout()
-            return
+            null
         } catch (e: Throwable) {
-            Timber.tag(TAG).e(e, "refreshAndReconnect: token refresh failed")
-            _lastError.value = "discord_error_token_refresh_failed"
-            return
+            Timber.tag(TAG).e(e, "refreshAccessToken: failed")
+            null
         }
+    }
 
-        Timber.tag(TAG).i(
-            "refreshAndReconnect: refresh succeeded (token length=%d, expiresIn=%d), reconnecting",
-            refreshed.accessToken.length,
-            refreshed.expiresInSec,
-        )
-        DiscordTokenStore.storeFull(
-            refreshed.accessToken,
-            refreshed.refreshToken,
-            refreshed.expiresInSec,
-        )
-        reconnectWithToken(refreshed.accessToken)
+    private suspend fun performConnectAndAuth(token: String, action: ReconnectAction) {
+        try {
+            gateway.connect()
+            when (action) {
+                is ReconnectAction.Resume -> {
+                    Timber.tag(TAG).i("performConnectAndAuth: sending RESUME")
+                    gateway.resume(action.sessionId, action.seq, "Bearer $token")
+                }
+                else -> {
+                    Timber.tag(TAG).i("performConnectAndAuth: sending IDENTIFY")
+                    gateway.identify("Bearer $token")
+                }
+            }
+        } catch (e: Throwable) {
+            Timber.tag(TAG).e(e, "performConnectAndAuth: failed")
+            _connectionStatus.value = Status.Disconnected
+            
+            val nextAction = if (action is ReconnectAction.Resume) {
+                ReconnectAction.ReIdentify
+            } else action
+            
+            scope.launch {
+                handleReconnectAction(nextAction, 4000, "connect_failed")
+            }
+        }
+    }
+
+    private suspend fun handleReconnectAction(action: ReconnectAction, code: Int, reason: String) {
+        reconnectMutex.withLock {
+            val token = accessToken
+            if (token == null) {
+                Timber.tag(TAG).w("handleReconnectAction: no access token, cannot reconnect")
+                _connectionStatus.value = Status.Disconnected
+                return
+            }
+
+            when (action) {
+                is ReconnectAction.SurfaceFatal -> {
+                    Timber.tag(TAG).w("handleReconnectAction: SurfaceFatal for closeCode=%d, giving up", code)
+                    _connectionStatus.value = Status.Disconnected
+                }
+                is ReconnectAction.RefreshAndReIdentify -> {
+                    Timber.tag(TAG).w("handleReconnectAction: RefreshAndReIdentify, refreshing token")
+                    _connectionStatus.value = Status.Authorizing
+                    val refreshed = refreshAccessToken()
+                    if (refreshed != null) {
+                        performConnectAndAuth(refreshed, ReconnectAction.ReIdentify)
+                    } else {
+                        Timber.tag(TAG).e("handleReconnectAction: token refresh failed, giving up")
+                        _connectionStatus.value = Status.Disconnected
+                    }
+                }
+                is ReconnectAction.Resume,
+                is ReconnectAction.ReIdentify -> {
+                    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                        Timber.tag(TAG).w("handleReconnectAction: max reconnect attempts reached (%d), giving up", MAX_RECONNECT_ATTEMPTS)
+                        _lastError.value = "discord_error_loopback_timeout"
+                        _connectionStatus.value = Status.Disconnected
+                        return
+                    }
+                    reconnectAttempts++
+                    val delayMs = if (code == 429) {
+                        parseRetryAfter(reason).coerceAtLeast(60_000L)
+                    } else {
+                        reconnectDelayMs(reconnectAttempts)
+                    }
+                    Timber.tag(TAG).i("handleReconnectAction: reconnecting in %dms (attempt %d/%d, action=%s)",
+                        delayMs, reconnectAttempts, MAX_RECONNECT_ATTEMPTS, action::class.simpleName)
+                    
+                    _connectionStatus.value = Status.Authorizing
+                    delay(delayMs)
+                    performConnectAndAuth(token, action)
+                }
+            }
+        }
+    }
+
+    private fun reconnectDelayMs(attempt: Int): Long {
+        val base = (RECONNECT_BASE_DELAY_MS * (1L shl (attempt - 1)))
+            .coerceAtMost(RECONNECT_MAX_DELAY_MS)
+        return applyJitter(base, 0.25)
+    }
+
+    private fun applyJitter(intervalMs: Long, ratio: Double): Long {
+        if (intervalMs <= 0L) return intervalMs
+        val delta = (intervalMs * ratio).toLong()
+        if (delta <= 0L) return intervalMs
+        val offset = java.lang.Math.abs(kotlin.random.Random.nextLong(delta + 1))
+        val sign = if (kotlin.random.Random.nextBoolean()) -1L else 1L
+        return intervalMs + sign * offset
+    }
+
+    private fun parseRetryAfter(reason: String): Long {
+        val prefix = ";retry_after="
+        val idx = reason.indexOf(prefix)
+        if (idx < 0) return 60_000L
+        val value = reason.substring(idx + prefix.length).trim()
+        val seconds = value.substringBefore(';').substringBefore(',').toDoubleOrNull()
+        return if (seconds != null) (seconds * 1000.0).toLong().coerceAtLeast(60_000L) else 60_000L
     }
 
     fun disconnect() {
         Timber.tag(TAG).i("disconnect: closing gateway, clearing ready/authorized")
         currentActivityId.incrementAndGet()
         imageResolutionJob?.cancel()
+        pendingActivity = null
         runCatching { gateway.close(1000, "user disconnect") }
         _connectionStatus.value = Status.Disconnected
         _ready = false
@@ -571,6 +658,7 @@ object DiscordRpcManager {
         Timber.tag(TAG).i("destroy: cancelling scope and tearing down (initialized=%s)", initialized)
         currentActivityId.incrementAndGet()
         imageResolutionJob?.cancel()
+        pendingActivity = null
         runCatching { gateway.close(1000, "destroy") }
         runCatching { gateway.closeHttp() }
         scope.cancel()
@@ -595,6 +683,7 @@ object DiscordRpcManager {
         _lastError.value = null
         lastActivity = null
         currentActivityHadImages = false
+        pendingActivity = null
     }
 
     private suspend fun handleGatewayEvent(event: GatewayEvent) {
@@ -605,6 +694,13 @@ object DiscordRpcManager {
                 _authorized = true
                 _connectionStatus.value = Status.Connected
                 _lastError.value = null
+                reconnectAttempts = 0
+                
+                pendingActivity?.let { activity ->
+                    Timber.tag(TAG).i("gateway READY: sending pending activity (name=%s)", activity.name)
+                    setActivity(activity, pendingSongId, pendingIsPlaying, pendingStatus)
+                }
+
                 val token = accessToken ?: return
                 scope.launch {
                     val user = fetchCurrentUser(token)
@@ -620,6 +716,12 @@ object DiscordRpcManager {
                 _authorized = true
                 _connectionStatus.value = Status.Connected
                 _lastError.value = null
+                reconnectAttempts = 0
+                
+                pendingActivity?.let { activity ->
+                    Timber.tag(TAG).i("gateway RESUMED: sending pending activity (name=%s)", activity.name)
+                    setActivity(activity, pendingSongId, pendingIsPlaying, pendingStatus)
+                }
             }
             is GatewayEvent.Disconnected -> {
                 Timber.tag(TAG).i("gateway: Disconnected (code=%d, remote=%s, reason=%s)",
@@ -631,22 +733,33 @@ object DiscordRpcManager {
                 currentIsPlaying = false
                 imageResolutionJob?.cancel()
                 imageResolutionJob = null
+
                 if (event.code in setOf(4001, 4004) && event.reason.contains("max reconnect", ignoreCase = true)) {
                     _lastError.value = when (event.code) {
                         4004 -> "discord_error_token_refresh_failed"
                         4001 -> "discord_error_invalid_scope"
                         else -> _lastError.value
                     }
+                    return
+                }
+
+                val gatewaySessionId = gateway.sessionId
+                val gatewaySeq = gateway.currentSeq
+                val action = DiscordReconnectStrategy.decide(
+                    closeCode = event.code,
+                    hadSession = !gatewaySessionId.isNullOrEmpty(),
+                    seq = gatewaySeq,
+                    sessionId = gatewaySessionId
+                )
+
+                scope.launch {
+                    handleReconnectAction(action, event.code, event.reason)
                 }
             }
             is GatewayEvent.InvalidSession -> {
                 Timber.tag(TAG).w("gateway: InvalidSession (resumable=%s), closing WS to trigger reconnect", event.resumable)
                 imageResolutionJob?.cancel()
                 imageResolutionJob = null
-            }
-            is GatewayEvent.RefreshToken -> {
-                Timber.tag(TAG).w("gateway: RefreshToken requested, refreshing and reconnecting")
-                scope.launch { refreshAndReconnect() }
             }
             is GatewayEvent.Hello -> Unit
             is GatewayEvent.HeartbeatAck -> Unit

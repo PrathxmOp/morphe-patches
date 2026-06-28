@@ -30,7 +30,6 @@ sealed interface GatewayEvent {
     data class HeartbeatAck(val lastSeq: Int?) : GatewayEvent
     data class InvalidSession(val resumable: Boolean) : GatewayEvent
     data class Disconnected(val code: Int, val reason: String, val remote: Boolean) : GatewayEvent
-    data object RefreshToken : GatewayEvent
     data class TextDispatch(val op: Int, val t: String?, val d: JSONObject) : GatewayEvent
 }
 
@@ -68,9 +67,6 @@ class DiscordGateway(
 
     @Volatile
     private var gatewayUrl: String = DEFAULT_GATEWAY_URL
-
-    @Volatile
-    private var reconnectAttempts: Int = 0
 
     @Volatile
     private var heartbeatJob: Job? = null
@@ -268,11 +264,9 @@ class DiscordGateway(
                             sessionId.take(8), resumeUrl?.take(60),
                         )
                         if (resumeUrl != null) setGatewayUrl(resumeUrl)
-                        reconnectAttempts = 0
                         _events.emit(GatewayEvent.Ready(sessionId, resumeUrl))
                     }
                     "RESUMED" -> {
-                        reconnectAttempts = 0
                         Timber.tag(TAG).d("handleFrame: RESUMED parsed (sessionId prefix=%s)", _sessionId?.take(8))
                         _events.emit(GatewayEvent.Resumed(_sessionId.orEmpty()))
                     }
@@ -326,78 +320,6 @@ class DiscordGateway(
             _sessionId = null
             _currentSeq = 0
             return
-        }
-
-        val action = DiscordReconnectStrategy.decide(
-            closeCode = code,
-            hadSession = _sessionId != null,
-            seq = _currentSeq,
-            sessionId = _sessionId,
-        )
-        Timber.tag(TAG).i("handleClose: strategy=%s for closeCode=%d", action::class.simpleName, code)
-
-        when (action) {
-            is ReconnectAction.SurfaceFatal -> {
-                Timber.tag(TAG).w("SurfaceFatal for closeCode=%d, giving up", code)
-                _sessionId = null
-                _currentSeq = 0
-            }
-            is ReconnectAction.RefreshAndReIdentify -> {
-                Timber.tag(TAG).w("RefreshAndReIdentify for closeCode=%d, delegating to manager", code)
-                _events.emit(GatewayEvent.RefreshToken)
-            }
-            is ReconnectAction.Resume,
-            is ReconnectAction.ReIdentify -> {
-                if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-                    Timber.tag(TAG).w("max reconnect attempts reached (%d), giving up", MAX_RECONNECT_ATTEMPTS)
-                    _events.emit(
-                        GatewayEvent.Disconnected(4000, "max reconnect attempts", remote = false),
-                    )
-                    return
-                }
-                reconnectAttempts++
-                val delay = if (code == 429) {
-                    val retryAfter = parseRetryAfter(reason)
-                    retryAfter.coerceAtLeast(60_000L)
-                } else {
-                    reconnectDelayMs(reconnectAttempts)
-                }
-                Timber.tag(TAG).i("handleClose: reconnecting in %dms (attempt %d, code=%d)", delay, reconnectAttempts, code)
-                delay(delay)
-                performReconnect(action)
-            }
-        }
-    }
-
-    private suspend fun performReconnect(action: ReconnectAction) {
-        try {
-            connect()
-        } catch (e: Throwable) {
-            Timber.tag(TAG).e(e, "performReconnect: connect failed")
-            return
-        }
-
-        when (action) {
-            is ReconnectAction.Resume -> {
-                try {
-                    val token = tokenProvider()
-                    resume(action.sessionId, action.seq, token)
-                } catch (e: Throwable) {
-                    Timber.tag(TAG).e(e, "performReconnect: resume failed")
-                    webSocket?.close(1011, "resume failed")
-                }
-            }
-            is ReconnectAction.ReIdentify -> {
-                try {
-                    val token = tokenProvider()
-                    identify(token)
-                } catch (e: Throwable) {
-                    Timber.tag(TAG).e(e, "performReconnect: identify failed")
-                    webSocket?.close(1011, "identify failed")
-                }
-            }
-            is ReconnectAction.SurfaceFatal -> {}
-            is ReconnectAction.RefreshAndReIdentify -> {}
         }
     }
 
@@ -463,21 +385,6 @@ class DiscordGateway(
         return root.toString()
     }
 
-    private fun reconnectDelayMs(attempt: Int): Long {
-        val base = (RECONNECT_BASE_DELAY_MS * (1L shl (attempt - 1)))
-            .coerceAtMost(RECONNECT_MAX_DELAY_MS)
-        return applyJitter(base, 0.25)
-    }
-
-    private fun parseRetryAfter(reason: String): Long {
-        val prefix = ";retry_after="
-        val idx = reason.indexOf(prefix)
-        if (idx < 0) return 60_000L
-        val value = reason.substring(idx + prefix.length).trim()
-        val seconds = value.substringBefore(';').substringBefore(',').toDoubleOrNull()
-        return if (seconds != null) (seconds * 1000.0).toLong().coerceAtLeast(60_000L) else 60_000L
-    }
-
     private fun applyJitter(intervalMs: Long, ratio: Double): Long {
         if (intervalMs <= 0L) return intervalMs
         val delta = (intervalMs * ratio).toLong()
@@ -493,9 +400,6 @@ class DiscordGateway(
         private const val DEFAULT_GATEWAY_URL = "wss://gateway.discord.gg/?v=10&encoding=json"
         private const val DEFAULT_HEARTBEAT_MS = 41250L
         private const val JITTER_RATIO = 0.05
-        private const val MAX_RECONNECT_ATTEMPTS = 7
-        private const val RECONNECT_BASE_DELAY_MS = 1000L
-        private const val RECONNECT_MAX_DELAY_MS = 64_000L
 
         private const val DISPATCH = 0
         private const val HEARTBEAT = 1

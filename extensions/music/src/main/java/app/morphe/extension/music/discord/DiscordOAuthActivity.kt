@@ -38,13 +38,20 @@ class DiscordOAuthActivity : Activity() {
         }
     }
 
+    private fun finishAndReturn() {
+        packageManager.getLaunchIntentForPackage(packageName)?.apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }?.let { startActivity(it) }
+        finish()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Timber.tag(TAG).i("OAuthActivity: onCreate with intent=%s", intent?.action)
 
         val uri = intent?.data ?: run {
             Timber.tag(TAG).w("OAuthActivity: no URI in intent")
-            finish()
+            finishAndReturn()
             return
         }
 
@@ -57,7 +64,7 @@ class DiscordOAuthActivity : Activity() {
             deferred?.completeExceptionally(
                 DiscordAuthException.UserCancelled("Authorization denied: $error")
             )
-            finish()
+            finishAndReturn()
             return
         }
 
@@ -66,13 +73,13 @@ class DiscordOAuthActivity : Activity() {
             deferred?.completeExceptionally(
                 DiscordAuthException.InvalidGrant("Missing authorization code")
             )
-            finish()
+            finishAndReturn()
             return
         }
 
         Timber.tag(TAG).i("OAuthActivity: received code (length=%d)", code.length)
         deferred?.complete(AuthCodeResult(code = code, state = state ?: ""))
-        finish()
+        finishAndReturn()
     }
 }
 

@@ -124,6 +124,7 @@ private val settingsResourcePatch = resourcePatch {
                 val activity = document.createElement("activity")
                 activity.setAttribute("android:name", "app.morphe.extension.music.discord.DiscordOAuthActivity")
                 activity.setAttribute("android:exported", "true")
+                activity.setAttribute("android:launchMode", "singleTask")
 
                 val intentFilter = document.createElement("intent-filter")
 
@@ -187,11 +188,12 @@ val settingsPatch = bytecodePatch(
             selectable = true
         )
 
+        PreferenceScreen.ADS.addPreferences()
         PreferenceScreen.GENERAL.addPreferences(
             SwitchPreference("morphe_settings_search_history"),
             SwitchPreference("morphe_show_menu_icons")
         )
-
+        PreferenceScreen.PLAYER.addPreferences()
         PreferenceScreen.MISC.addPreferences(
             TextPreference(
                 key = null,
@@ -201,6 +203,8 @@ val settingsPatch = bytecodePatch(
                 tag = "app.morphe.extension.shared.settings.preference.ImportExportPreference",
             )
         )
+        PreferenceScreen.SCROBBLING.addPreferences()
+        PreferenceScreen.DISCORD_RPC.addPreferences()
 
         modifyActivityForSettingsInjection(
             GoogleApiActivityOnCreateFingerprint,
@@ -258,7 +262,8 @@ object PreferenceScreen : BasePreferenceScreen() {
         layout = "@layout/morphe_preference_with_icon"
     )
     val SCROBBLING = Screen(
-        key = "morphe_settings_music_screen_4_scrobbling",
+        key = "morphe_settings_music_screen_5_scrobbling",
+        titleKey = "morphe_settings_music_screen_4_scrobbling_title",
         summaryKey = null,
         icon = "@drawable/morphe_settings_music_screen_05_scrobbling",
         iconBold = "@drawable/morphe_settings_music_screen_05_scrobbling_bold",
@@ -266,16 +271,17 @@ object PreferenceScreen : BasePreferenceScreen() {
         sorting = Sorting.UNSORTED
     )
     val DISCORD_RPC = Screen(
-        key = "morphe_settings_music_screen_5_discord_rpc",
+        key = "morphe_settings_music_screen_6_discord_rpc",
         titleKey = "morphe_settings_music_screen_5_discord_rpc_title",
-        summaryKey = "morphe_music_discord_rpc_screen_summary",
+        summaryKey = null,
         icon = "@drawable/morphe_settings_music_screen_06_discord",
         iconBold = "@drawable/morphe_settings_music_screen_06_discord_bold",
         layout = "@layout/morphe_preference_with_icon",
         sorting = Sorting.UNSORTED
     )
     val MISC = Screen(
-        key = "morphe_settings_music_screen_5_misc",
+        key = "morphe_settings_music_screen_4_misc",
+        titleKey = "morphe_settings_music_screen_5_misc_title",
         summaryKey = null,
         icon = "@drawable/morphe_settings_screen_11_misc",
         iconBold = "@drawable/morphe_settings_screen_11_misc_bold",

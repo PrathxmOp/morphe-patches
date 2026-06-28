@@ -85,7 +85,12 @@ val discordRpcPatch = bytecodePatch(
 
     execute {
         PreferenceScreen.DISCORD_RPC.addPreferences(
-            SwitchPreference("morphe_music_discord_rpc_enabled"),
+            NonInteractivePreference(
+                key = "morphe_music_discord_rpc_about",
+                titleKey = "morphe_music_discord_rpc_about_title",
+                summaryKey = "morphe_music_discord_rpc_about_summary"
+            ),
+            SwitchPreference("morphe_music_discord_rpc_enabled", summary = true),
             PreferenceCategory(
                 key = "morphe_music_discord_rpc_account_category",
                 titleKey = "morphe_music_discord_rpc_token_title",
@@ -118,9 +123,6 @@ val discordRpcPatch = bytecodePatch(
         )
 
         MediaSessionSetPlaybackStateFingerprint.let {
-            java.io.File("/home/prathxm/Development/morphe-patches/matched_classes.txt").appendText(
-                "DiscordPatch: SetPlaybackState matched class: ${it.classDef.type}, method: ${it.method.name}\n"
-            )
             it.method.apply {
                 val index = it.instructionMatches.first().index
                 val register = getInstruction<FiveRegisterInstruction>(index).registerD
@@ -133,9 +135,6 @@ val discordRpcPatch = bytecodePatch(
         }
 
         MediaSessionSetMetadataFingerprint.let {
-            java.io.File("/home/prathxm/Development/morphe-patches/matched_classes.txt").appendText(
-                "DiscordPatch: SetMetadata matched class: ${it.classDef.type}, method: ${it.method.name}\n"
-            )
             it.method.apply {
                 val index = it.instructionMatches.first().index
                 val sessionRegister = getInstruction<FiveRegisterInstruction>(index).registerC
@@ -149,9 +148,6 @@ val discordRpcPatch = bytecodePatch(
         }
 
         MediaSessionSetQueueFingerprint.let {
-            java.io.File("/home/prathxm/Development/morphe-patches/matched_classes.txt").appendText(
-                "DiscordPatch: SetQueue matched class: ${it.classDef.type}, method: ${it.method.name}\n"
-            )
             it.method.apply {
                 val index = it.instructionMatches.first().index
                 val sessionRegister = getInstruction<FiveRegisterInstruction>(index).registerC
@@ -165,9 +161,6 @@ val discordRpcPatch = bytecodePatch(
         }
 
         VideoIdFingerprint.let {
-            java.io.File("/home/prathxm/Development/morphe-patches/matched_classes.txt").appendText(
-                "DiscordPatch: VideoId matched class: ${it.classDef.type}, method: ${it.method.name}\n"
-            )
             it.method.apply {
                 val index = it.instructionMatches[1].index
                 val videoIdRegister = getInstruction<OneRegisterInstruction>(index).registerA
@@ -180,9 +173,6 @@ val discordRpcPatch = bytecodePatch(
 
         try {
             VideoIdBackgroundPlayFingerprint.let {
-                java.io.File("/home/prathxm/Development/morphe-patches/matched_classes.txt").appendText(
-                    "DiscordPatch: VideoIdBackgroundPlay matched class: ${it.classDef.type}, method: ${it.method.name}\n"
-                )
                 it.method.apply {
                     val index = it.instructionMatches.first().index
                     val videoIdRegister = getInstruction<OneRegisterInstruction>(index + 1).registerA
@@ -193,9 +183,7 @@ val discordRpcPatch = bytecodePatch(
                 }
             }
         } catch (e: Throwable) {
-            java.io.File("/home/prathxm/Development/morphe-patches/matched_classes.txt").appendText(
-                "DiscordPatch: VideoIdBackgroundPlay fingerprint failed to match (optional)\n"
-            )
+            // VideoIdBackgroundPlay fingerprint failed to match (optional)
         }
     }
 }

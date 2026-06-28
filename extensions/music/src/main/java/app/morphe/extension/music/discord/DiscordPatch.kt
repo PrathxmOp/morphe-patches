@@ -13,6 +13,8 @@ object DiscordPatch {
     private var currentPlaybackState: PlaybackState? = null
     private var mediaSession: android.media.session.MediaSession? = null
     private var isInitialized = false
+    @Volatile
+    private var videoIdUpdated = false
 
     init {
         android.util.Log.e("DiscordSvc", "DiscordPatch class loaded!")
@@ -61,6 +63,7 @@ object DiscordPatch {
     fun setVideoId(videoId: String?) {
         android.util.Log.e("DiscordSvc", "setVideoId: $videoId")
         currentVideoId = videoId
+        videoIdUpdated = true
         if (currentMetadata != null) {
             updatePresence()
         }
@@ -89,6 +92,7 @@ object DiscordPatch {
         if (newTitle != oldTitle || newArtist != oldArtist) {
             currentVideoId = null
         }
+        videoIdUpdated = false
 
         currentMetadata = metadata
         updatePresence()

@@ -174,7 +174,16 @@ YouTube Music 8.x — crossfade only runs on 9.x and newer"</string>
     <string name="morphe_settings_music_screen_5_discord_rpc_title">Discord Rich Presence</string>
     <string name="morphe_music_discord_rpc_screen_title">Discord Rich Presence</string>
     <string name="morphe_music_discord_rpc_screen_summary">Show what you are listening to on your Discord profile</string>
+    <string name="morphe_music_discord_rpc_about_title">About Discord RPC</string>
+    <string name="morphe_music_discord_rpc_about_summary">"Discord Rich Presence connects directly to Discord to show your current song on your profile.
+
+Special thanks to the Metrolist team for providing the Discord RPC implementation and hosting resources.
+
+Rate Limiting: Discord limits presence updates to once every 15 seconds. Rapid changes like skipping tracks may take a few seconds to reflect on your profile.
+
+Background Playback: To ensure presence updates continue reliably in the background, please verify that YouTube Music's system battery usage is set to \"Unrestricted\"."</string>
     <string name="morphe_music_discord_rpc_enabled_title">Enable Discord RPC</string>
+    <string name="morphe_music_discord_rpc_enabled_summary">Show your current song on your Discord profile</string>
     <string name="morphe_music_discord_rpc_token_title">Discord Account</string>
     <string name="morphe_music_discord_rpc_token_summary_logged_in">Linked</string>
     <string name="morphe_music_discord_rpc_token_summary_logged_out">Not Linked</string>
